@@ -1,19 +1,35 @@
 import os
+import asyncio
 import discord
 from discord import app_commands
 from discord.ext import commands
+from aiohttp import web
 
-# 1. Botの初期設定とインテントの有効化
+# 1. 簡易Webサーバーの設定（Renderのポート検知用）
+async def handle(request):
+    return web.Response(text="Bot is running!")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Renderが指定する環境変数 PORT を取得（デフォルトは 10000）
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"Webサーバーをポート {port} で起動しました。")
+
+# 2. Botの初期設定とインテントの有効化
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-# プレフィックスとインテントの設定
-bot = commands.Bot(command_prefix="/", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    # スラッシュコマンドをDiscord側に同期する
     try:
         synced = await bot.tree.sync()
         print(f"Synced {len(synced)} command(s)")
@@ -37,9 +53,9 @@ class VerifyView(discord.ui.View):
                 await interaction.response.send_message("すでに認証は完了しています！", ephemeral=True)
             else:
                 await interaction.user.add_roles(self.verify_role)
-                await interaction.response.send_message("✅ 認証が完了し、ロールが付与されました！", ephemeral=True)
+                await interaction.response.send_message("✅ 認証が完了しロールが付与されました！", ephemeral=True)
         except discord.Forbidden:
-            await interaction.response.send_message("⚠️ Botにロールを付与する権限がないか、Botの役職位置が対象ロールより低いです。", ephemeral=True)
+            await interaction.response.send_message("⚠️ Botにロールを付与する権限がないか、役職の位置が低いです。", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"⚠️ エラーが発生しました: {e}", ephemeral=True)
 
@@ -47,49 +63,50 @@ class VerifyView(discord.ui.View):
 # ==========================================
 # スラッシュコマンド
 # ==========================================
-
-# 1. /verify_setup [role] : 認証で付与するロールを事前に設定
 @bot.tree.command(name="verify_setup", description="認証時に付与するロールを設定します。")
 @app_commands.describe(role="付与したいロールを選択してください")
 @app_commands.checks.has_permissions(administrator=True)
 async def verify_setup(interaction: discord.Interaction, role: discord.Role):
     bot.verify_target_role = role
-    await interaction.response.send_message(f"✅ 認証ロールを {role.mention} に設定しました。次に `/verify_panel` でパネルを生成してください。", ephemeral=True)
+    await interaction.response.send_message(f"✅ 認証ロールを {role.mention} に設定しました。", ephemeral=True)
 
-# 2. /verify_panel : 認証パネルを送信
 @bot.tree.command(name="verify_panel", description="認証パネルをチャンネルに送信します。")
 @app_commands.checks.has_permissions(administrator=True)
 async def verify_panel(interaction: discord.Interaction):
-    # 設定されたロールを取得、なければ「メンバー」を探す
     target_role = getattr(bot, "verify_target_role", None)
     if not target_role:
         target_role = discord.utils.get(interaction.guild.roles, name="メンバー")
         if not target_role:
-            await interaction.response.send_message("⚠️ 先に `/verify_setup` でロールを設定するか、サーバーに「メンバー」ロールを作成してください。", ephemeral=True)
+            await interaction.response.send_message("⚠️ 先に `/verify_setup` でロールを設定してください。", ephemeral=True)
             return
 
-    embed = discord.Embed(
-        title="🔒 サーバー認証",
-        description="下のボタンを押して認証を完了させてください。",
-        color=discord.Color.blue()
-    )
+    embed = discord.Embed(title="🔒 サーバー認証", description="下のボタンを押して認証を完了させてください。", color=discord.Color.blue())
     view = VerifyView(target_role)
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("認証パネルを送信しました！", ephemeral=True)
 
-# 権限エラーなどのハンドリング
 @verify_setup.error
 @verify_panel.error
 async def verify_command_error(interaction: discord.Interaction, error):
     if isinstance(error, app_commands.errors.MissingPermissions):
-        await interaction.response.send_message("❌ このコマンドを実行する権限がありません（管理者限定）。", ephemeral=True)
+        await interaction.response.send_message("❌ 管理者権限が必要です。", ephemeral=True)
     else:
-        await interaction.response.send_message(f"❌ コマンド実行中にエラーが発生しました: {error}", ephemeral=True)
+        await interaction.response.send_message(f"❌ エラー: {error}", ephemeral=True)
 
 
-# Botの起動（環境変数からトークンを取得）
-TOKEN = os.getenv("DISCORD_TOKEN")
-if not TOKEN:
-    print("エラー: DISCORD_TOKEN の環境変数が設定されていません。")
-else:
-    bot.run(TOKEN)
+# 3. メインの起動処理（WebサーバーとBotを同時に非同期実行）
+async def main():
+    TOKEN = os.getenv("DISCORD_TOKEN")
+    if not TOKEN:
+        print("エラー: DISCORD_TOKEN の環境変数が設定されていません。")
+        return
+
+    # Webサーバーをバックグラウンドで起動
+    await start_web_server()
+
+    # Botを起動
+    async with bot:
+        await bot.start(TOKEN)
+
+if __name__ == "__main__":
+    asyncio.run(main())
