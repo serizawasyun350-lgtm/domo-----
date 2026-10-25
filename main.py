@@ -26,7 +26,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-bot = commands.Bot(command_prefix="/", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
@@ -130,7 +130,7 @@ async def slot_game(interaction: discord.Interaction):
         msg = "🎉 **大当たり！おめでとうございます！** 🎉"
         color = discord.Color.gold()
     elif res[0] == res[1] or res[1] == res[2] or res[0] == res[2]:
-        msg = "✨ **おしい！2つ揃いました！** ✨"
+        msg = "✨ **おしい！2つ揃えました！** ✨"
         color = discord.Color.blue()
     else:
         msg = "😢 **ハズレ…また挑戦してね！** 😢"
