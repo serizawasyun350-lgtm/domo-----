@@ -141,7 +141,6 @@ async def slot_game(interaction: discord.Interaction):
 
 @bot.tree.command(name="gacha", description="🎁 運試し！ランダムガチャを引く")
 async def gacha_command(interaction: discord.Interaction):
-    # ガチャの排出設定（確率とレア度）
     pool = [
         ("🌟🌟🌟🌟🌟 【SSR】 神話級アイテム", discord.Color.gold()),
         ("⭐⭐⭐⭐ 【SR】 超レアアイテム", discord.Color.purple()),
@@ -149,7 +148,6 @@ async def gacha_command(interaction: discord.Interaction):
         ("⭐⭐ 【N】 ノーマルアイテム（その1）", discord.Color.green()),
         ("⭐ 【N】 ノーマルアイテム（その2）", discord.Color.light_gray())
     ]
-    # 重み付きランダム（SSRは低確率、Nは高確率）
     weights = [2, 8, 20, 35, 35]
     item, color = random.choices(pool, weights=weights, k=1)[0]
 
